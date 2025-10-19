@@ -1,4 +1,4 @@
-import * as core from '@actions/core'
+import * as core from "@actions/core";
 
 export const retry = async (
   fn: Function,
@@ -7,13 +7,13 @@ export const retry = async (
 ): Promise<any> => {
   for (let i = 0; i < times; i++) {
     try {
-      return await fn(...args)
+      return await fn(...args);
     } catch (error) {
       if (i === times - 1) {
-        throw error
+        throw error;
       }
-      core.warning(`Function failed on try ${i + 1}, retrying...`)
-      continue
+      core.warning(`Function failed on try ${i + 1}, retrying...`);
+      continue;
     }
   }
-}
+};

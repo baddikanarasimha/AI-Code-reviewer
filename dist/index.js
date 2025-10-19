@@ -27078,12 +27078,7 @@ class Bot {
 
 
 
-const token = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('token')
-    ? _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('token')
-    : process.env.GITHUB_TOKEN;
-const octokit = new _octokit_action__WEBPACK_IMPORTED_MODULE_2__/* .Octokit */ .v({ auth: `token ${token}` });
 const context = _actions_github__WEBPACK_IMPORTED_MODULE_1__.context;
-const repo = context.repo;
 const COMMENT_GREETING = `:robot: OpenAI`;
 const COMMENT_TAG = '<!-- This is an auto-generated comment by OpenAI -->';
 const COMMENT_REPLY_TAG = '<!-- This is an auto-generated reply by OpenAI -->';
@@ -27091,6 +27086,21 @@ const SUMMARIZE_TAG = '<!-- This is an auto-generated comment: summarize by open
 const DESCRIPTION_TAG = '<!-- This is an auto-generated comment: release notes by openai -->';
 const DESCRIPTION_TAG_END = '<!-- end of auto-generated comment: release notes by openai -->';
 class Commenter {
+    octokit;
+    repo;
+    constructor() {
+        this.octokit = null;
+        this.repo = null;
+        // Only initialize Octokit when running inside GitHub Actions to avoid
+        // runtime errors during local tests.
+        if (process.env.GITHUB_ACTION) {
+            const token = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('token')
+                ? _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('token')
+                : process.env.GITHUB_TOKEN;
+            this.octokit = new _octokit_action__WEBPACK_IMPORTED_MODULE_2__/* .Octokit */ .v({ auth: `token ${token}` });
+            this.repo = context.repo;
+        }
+    }
     /**
      * @param mode Can be "create", "replace", "append" and "prepend". Default is "replace".
      */
@@ -27142,13 +27152,17 @@ ${tag}`;
         return description;
     }
     async update_description(pull_number, message) {
+        if (!this.octokit || !this.repo) {
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning('Skipped: not running inside GitHub Actions environment');
+            return;
+        }
         // add this response to the description field of the PR as release notes by looking
         // for the tag (marker)
         try {
             // get latest description from PR
-            const pr = await octokit.pulls.get({
-                owner: repo.owner,
-                repo: repo.repo,
+            const pr = await this.octokit.pulls.get({
+                owner: this.repo.owner,
+                repo: this.repo.repo,
                 pull_number
             });
             let body = '';
@@ -27163,9 +27177,9 @@ ${tag}`;
             const comment = `${DESCRIPTION_TAG}\n${message}\n${DESCRIPTION_TAG_END}`;
             if (tag_index === -1 || tag_end_index === -1) {
                 const new_description = `${description}\n${comment}`;
-                await octokit.pulls.update({
-                    owner: repo.owner,
-                    repo: repo.repo,
+                await this.octokit.pulls.update({
+                    owner: this.repo.owner,
+                    repo: this.repo.repo,
                     pull_number,
                     body: new_description
                 });
@@ -27174,9 +27188,9 @@ ${tag}`;
                 let new_description = description.substring(0, tag_index);
                 new_description += comment;
                 new_description += description.substring(tag_end_index + DESCRIPTION_TAG_END.length);
-                await octokit.pulls.update({
-                    owner: repo.owner,
-                    repo: repo.repo,
+                await this.octokit.pulls.update({
+                    owner: this.repo.owner,
+                    repo: this.repo.repo,
                     pull_number,
                     body: new_description
                 });
@@ -27187,6 +27201,10 @@ ${tag}`;
         }
     }
     async review_comment(pull_number, commit_id, path, line, message, tag = COMMENT_TAG) {
+        if (!this.octokit || !this.repo) {
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning('Skipped: not running inside GitHub Actions environment');
+            return;
+        }
         message = `${COMMENT_GREETING}
 
 ${message}
@@ -27198,9 +27216,9 @@ ${tag}`;
             const comments = await this.get_comments_at_line(pull_number, path, line);
             for (const comment of comments) {
                 if (comment.body.includes(tag)) {
-                    await octokit.pulls.updateReviewComment({
-                        owner: repo.owner,
-                        repo: repo.repo,
+                    await this.octokit.pulls.updateReviewComment({
+                        owner: this.repo.owner,
+                        repo: this.repo.repo,
                         comment_id: comment.id,
                         body: message
                     });
@@ -27209,9 +27227,9 @@ ${tag}`;
                 }
             }
             if (!found) {
-                await octokit.pulls.createReviewComment({
-                    owner: repo.owner,
-                    repo: repo.repo,
+                await this.octokit.pulls.createReviewComment({
+                    owner: this.repo.owner,
+                    repo: this.repo.repo,
                     pull_number,
                     body: message,
                     commit_id,
@@ -27225,6 +27243,10 @@ ${tag}`;
         }
     }
     async review_comment_reply(pull_number, top_level_comment, message) {
+        if (!this.octokit || !this.repo) {
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning('Skipped: not running inside GitHub Actions environment');
+            return;
+        }
         const reply = `${COMMENT_GREETING}
 
 ${message}
@@ -27233,9 +27255,9 @@ ${COMMENT_REPLY_TAG}
 `;
         try {
             // Post the reply to the user comment
-            await octokit.pulls.createReplyForReviewComment({
-                owner: repo.owner,
-                repo: repo.repo,
+            await this.octokit.pulls.createReplyForReviewComment({
+                owner: this.repo.owner,
+                repo: this.repo.repo,
                 pull_number,
                 body: reply,
                 comment_id: top_level_comment.id
@@ -27244,9 +27266,9 @@ ${COMMENT_REPLY_TAG}
         catch (error) {
             _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Failed to reply to the top-level comment ${error}`);
             try {
-                await octokit.pulls.createReplyForReviewComment({
-                    owner: repo.owner,
-                    repo: repo.repo,
+                await this.octokit.pulls.createReplyForReviewComment({
+                    owner: this.repo.owner,
+                    repo: this.repo.repo,
                     pull_number,
                     body: `Could not post the reply to the top-level comment due to the following error: ${error}`,
                     comment_id: top_level_comment.id
@@ -27260,9 +27282,9 @@ ${COMMENT_REPLY_TAG}
             if (top_level_comment.body.includes(COMMENT_TAG)) {
                 // replace COMMENT_TAG with COMMENT_REPLY_TAG in topLevelComment
                 const newBody = top_level_comment.body.replace(COMMENT_TAG, COMMENT_REPLY_TAG);
-                await octokit.pulls.updateReviewComment({
-                    owner: repo.owner,
-                    repo: repo.repo,
+                await this.octokit.pulls.updateReviewComment({
+                    owner: this.repo.owner,
+                    repo: this.repo.repo,
                     comment_id: top_level_comment.id,
                     body: newBody
                 });
@@ -27336,13 +27358,17 @@ ${chain}
         return top_level_comment;
     }
     async list_review_comments(target) {
+        if (!this.octokit || !this.repo) {
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning('Skipped: not running inside GitHub Actions environment');
+            return [];
+        }
         const all_comments = [];
         let page = 1;
         try {
             for (;;) {
-                const { data: comments } = await octokit.pulls.listReviewComments({
-                    owner: repo.owner,
-                    repo: repo.repo,
+                const { data: comments } = await this.octokit.pulls.listReviewComments({
+                    owner: this.repo.owner,
+                    repo: this.repo.repo,
                     pull_number: target,
                     page,
                     per_page: 100
@@ -27361,10 +27387,14 @@ ${chain}
         }
     }
     async create(body, target) {
+        if (!this.octokit || !this.repo) {
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning('Skipped: not running inside GitHub Actions environment');
+            return;
+        }
         try {
-            await octokit.issues.createComment({
-                owner: repo.owner,
-                repo: repo.repo,
+            await this.octokit.issues.createComment({
+                owner: this.repo.owner,
+                repo: this.repo.repo,
                 issue_number: target,
                 body
             });
@@ -27374,12 +27404,16 @@ ${chain}
         }
     }
     async replace(body, tag, target) {
+        if (!this.octokit || !this.repo) {
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning('Skipped: not running inside GitHub Actions environment');
+            return;
+        }
         try {
             const cmt = await this.find_comment_with_tag(tag, target);
             if (cmt) {
-                await octokit.issues.updateComment({
-                    owner: repo.owner,
-                    repo: repo.repo,
+                await this.octokit.issues.updateComment({
+                    owner: this.repo.owner,
+                    repo: this.repo.repo,
                     comment_id: cmt.id,
                     body
                 });
@@ -27393,12 +27427,16 @@ ${chain}
         }
     }
     async append(body, tag, target) {
+        if (!this.octokit || !this.repo) {
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning('Skipped: not running inside GitHub Actions environment');
+            return;
+        }
         try {
             const cmt = await this.find_comment_with_tag(tag, target);
             if (cmt) {
-                await octokit.issues.updateComment({
-                    owner: repo.owner,
-                    repo: repo.repo,
+                await this.octokit.issues.updateComment({
+                    owner: this.repo.owner,
+                    repo: this.repo.repo,
                     comment_id: cmt.id,
                     body: `${cmt.body} ${body}`
                 });
@@ -27412,12 +27450,16 @@ ${chain}
         }
     }
     async prepend(body, tag, target) {
+        if (!this.octokit || !this.repo) {
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning('Skipped: not running inside GitHub Actions environment');
+            return;
+        }
         try {
             const cmt = await this.find_comment_with_tag(tag, target);
             if (cmt) {
-                await octokit.issues.updateComment({
-                    owner: repo.owner,
-                    repo: repo.repo,
+                await this.octokit.issues.updateComment({
+                    owner: this.repo.owner,
+                    repo: this.repo.repo,
                     comment_id: cmt.id,
                     body: `${body} ${cmt.body}`
                 });
@@ -27431,6 +27473,10 @@ ${chain}
         }
     }
     async find_comment_with_tag(tag, target) {
+        if (!this.octokit || !this.repo) {
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning('Skipped: not running inside GitHub Actions environment');
+            return null;
+        }
         try {
             const comments = await this.list_comments(target);
             for (const cmt of comments) {
@@ -27446,13 +27492,17 @@ ${chain}
         }
     }
     async list_comments(target) {
+        if (!this.octokit || !this.repo) {
+            _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning('Skipped: not running inside GitHub Actions environment');
+            return [];
+        }
         const all_comments = [];
         let page = 1;
         try {
             for (;;) {
-                const { data: comments } = await octokit.issues.listComments({
-                    owner: repo.owner,
-                    repo: repo.repo,
+                const { data: comments } = await this.octokit.issues.listComments({
+                    owner: this.repo.owner,
+                    repo: this.repo.repo,
                     issue_number: target,
                     page,
                     per_page: 100
@@ -29275,16 +29325,21 @@ class PathFilter {
 
 
 
-const token = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('token')
-    ? _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('token')
-    : process.env.GITHUB_TOKEN;
-const octokit = new _octokit_action__WEBPACK_IMPORTED_MODULE_5__/* .Octokit */ .v({ auth: `token ${token}` });
 const context = _actions_github__WEBPACK_IMPORTED_MODULE_1__.context;
-const repo = context.repo;
 const ASK_BOT = '@openai';
 const handleReviewComment = async (bot, options, prompts) => {
     const commenter = new _commenter_js__WEBPACK_IMPORTED_MODULE_2__/* .Commenter */ .Es();
     const inputs = new _options_js__WEBPACK_IMPORTED_MODULE_3__/* .Inputs */ .kq();
+    // Bail out early if not running in GitHub Actions (so unit tests can run)
+    if (!process.env.GITHUB_ACTION) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning('Skipped: Not running inside GitHub Actions environment');
+        return;
+    }
+    const token = _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('token')
+        ? _actions_core__WEBPACK_IMPORTED_MODULE_0__.getInput('token')
+        : process.env.GITHUB_TOKEN;
+    const octokit = new _octokit_action__WEBPACK_IMPORTED_MODULE_5__/* .Octokit */ .v({ auth: `token ${token}` });
+    const repo = context.repo;
     if (context.eventName !== 'pull_request_review_comment') {
         _actions_core__WEBPACK_IMPORTED_MODULE_0__.warning(`Skipped: ${context.eventName} is not a pull_request_review_comment event`);
         return;
@@ -29582,13 +29637,18 @@ var tokenizer = __nccwpck_require__(6153);
 
 
 
-const token = core.getInput('token')
-    ? core.getInput('token')
-    : process.env.GITHUB_TOKEN;
-const octokit = new dist_node/* Octokit */.v({ auth: `token ${token}` });
 const context = github.context;
-const repo = context.repo;
 const codeReview = async (bot, options, prompts) => {
+    // Bail out early if not running in GitHub Actions (so unit tests can run)
+    if (!process.env.GITHUB_ACTION) {
+        core.warning('Skipped: Not running inside GitHub Actions environment');
+        return;
+    }
+    const token = core.getInput('token')
+        ? core.getInput('token')
+        : process.env.GITHUB_TOKEN;
+    const octokit = new dist_node/* Octokit */.v({ auth: `token ${token}` });
+    const repo = context.repo;
     const commenter = new lib_commenter/* Commenter */.Es();
     const openai_concurrency_limit = pLimit(options.openai_concurrency_limit);
     if (context.eventName !== 'pull_request' &&
