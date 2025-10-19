@@ -1,0 +1,19 @@
+{
+  "root": true,
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": {
+    "sourceType": "module",
+    "ecmaVersion": 2020
+  },
+  "env": {
+    "es2021": true,
+    "node": true,
+    "jest": true
+  },
+  "plugins": ["jest"],
+  "extends": ["eslint:recommended", "plugin:jest/recommended"],
+  "ignorePatterns": ["dist/**", "lib/**"],
+  "rules": {
+    "no-undef": "off"
+  }
+}
